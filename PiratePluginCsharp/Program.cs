@@ -2,6 +2,7 @@ using Azure;
 using Azure.AI.OpenAI;
 using PiratePluginCsharp;
 using System.Diagnostics;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,7 +35,7 @@ app.MapPost("/arrrr", async (Data data) =>
     Uri azureOpenAIResourceUri = new(Environment.GetEnvironmentVariable("AZURE_OPENAI_API_ENDPOINT"));
     AzureKeyCredential azureOpenAIApiKey = new(Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY"));
     OpenAIClient client = new(azureOpenAIResourceUri, azureOpenAIApiKey);
-
+    
     var chatCompletionsOptions = new ChatCompletionsOptions()
     {
         DeploymentName = "gpt4", // Use DeploymentName for "model" with non-Azure clients
@@ -52,8 +53,9 @@ app.MapPost("/arrrr", async (Data data) =>
 
     // this feels super hack, still doesn't work even
     // feels like i'm using the Azure SDK wrong and that I should be more easily be able to return the streamed responses
-    async IAsyncEnumerable<CompletionChunk> StreamContentUpdates()
+    async Task StreamContentUpdatesAsync(Stream stream)
     {
+        TextWriter textWriter = new StreamWriter(stream);
         var responseStream = await client.GetChatCompletionsStreamingAsync(chatCompletionsOptions);
         await foreach (var response in responseStream)
         {
@@ -64,12 +66,15 @@ app.MapPost("/arrrr", async (Data data) =>
                 completionChunk.Id = response.Id;
                 completionChunk.Choices = new CompletionChunk.Choice[1];
                 completionChunk.Choices[0] = new CompletionChunk.Choice() { Delta = new() { Content = response.ContentUpdate } };
-                yield return completionChunk;
+
+                string dataLine = $"data: {JsonSerializer.Serialize(completionChunk)}";
+                await textWriter.WriteAsync(dataLine);
+                await textWriter.FlushAsync();
             }
         }
     }
-    
-    return StreamContentUpdates();
+
+    return Results.Stream(StreamContentUpdatesAsync, "text/event-stream");
     
     
     // stuck here
