@@ -68,7 +68,8 @@ app.MapPost("/arrrr", async (Data data) =>
                 completionChunk.Choices[0] = new CompletionChunk.Choice() { Delta = new() { Content = response.ContentUpdate } };
 
                 string dataLine = $"data: {JsonSerializer.Serialize(completionChunk)}";
-                await textWriter.WriteAsync(dataLine);
+                await textWriter.WriteLineAsync(dataLine);
+                await textWriter.WriteLineAsync(string.Empty);
                 await textWriter.FlushAsync();
             }
         }
